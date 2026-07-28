@@ -670,3 +670,47 @@ token_helper = ""
 			"WARNING: Duplicate keys found in the Vault token helper configuration file, duplicate keys in HCL files are deprecated and will be forbidden in a future release.")
 	})
 }
+
+type mockFailingLoginHandler struct {}
+
+func (h *mockFailingLoginHandler) Auth(c *api.Client, m map[string]string) (*api.Secret, error) {
+	return nil, fmt.Errorf("callback timeout")
+}
+
+func (h *mockFailingLoginHandler) Help() string {
+	return ""
+}
+
+func TestLoginCommand_JSONFormatError(t *testing.T) {
+	t.Parallel()
+
+	client, closer := testVaultServer(t)
+	defer closer()
+
+	ui, cmd := testLoginCommand(t)
+	cmd.client = client
+
+	// Add mock handler
+	cmd.Handlers["oidc"] = &mockFailingLoginHandler{}
+	
+	// Create a VaultUI so Format() returns json
+	vUI := &VaultUI{
+		Ui:     ui,
+		format: "json",
+	}
+	cmd.UI = vUI
+
+	code := cmd.Run([]string{
+		"-method", "oidc",
+		"-format", "json",
+	})
+
+	if exp := 2; code != exp {
+		t.Errorf("expected exit code %d, got %d", exp, code)
+	}
+
+	combined := ui.OutputWriter.String() + ui.ErrorWriter.String()
+	if !strings.Contains(combined, `"errors"`) || !strings.Contains(combined, "callback timeout") {
+		t.Errorf("expected JSON error output containing 'callback timeout', got %q", combined)
+	}
+}

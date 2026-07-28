@@ -227,6 +227,12 @@ func (c *LoginCommand) Run(args []string) int {
 	// Authenticate delegation to the auth handler
 	secret, err := authHandler.Auth(client, config)
 	if err != nil {
+		if Format(c.UI) == "json" {
+			OutputData(c.UI, map[string]interface{}{
+				"errors": []string{err.Error()},
+			})
+			return 2
+		}
 		c.UI.Error(fmt.Sprintf("Error authenticating: %s", err))
 		return 2
 	}
